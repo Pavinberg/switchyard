@@ -1,5 +1,6 @@
 xenv
 *.pyc
+*.srpy
 __pycache__
 .coverage
 htmlcov
@@ -8,6 +9,7 @@ updatepypi.sh
 switchyard.egg-info
 build
 dist
+tmp/
 # venv
 syenv/
 # vscode
