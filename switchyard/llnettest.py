@@ -76,7 +76,8 @@ class LLNetTest(LLNetBase):
             self.scenario.testpass()
             return ev.generate_packet(self.timestamp, self.scenario)
         else:
-            raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
+            raise NoPackets
+            # raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
 
     def send_packet(self, devname, pkt):
         if self.scenario.done():
