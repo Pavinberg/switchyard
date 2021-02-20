@@ -4,6 +4,7 @@ import os
 import signal
 import re
 import subprocess
+import threading
 import time
 from queue import Queue,Empty
 import importlib
@@ -592,6 +593,7 @@ class PacketOutputEvent(SwitchyardTestEvent):
 
 TestScenarioEvent = namedtuple('TestScenarioEvent', ['event','description','timestamp'])
 
+lock = threading.Lock()
 class TestScenario(object):
     '''
     Test scenario definition.  Given a list of packetio event objects,
@@ -603,6 +605,7 @@ class TestScenario(object):
         self._pending_events = []
         self._completed_events = []
         self._timer = False
+        self._threadTimer = None
         self._next_timestamp = 0.0
         self._timeoutval = 60
         self._support_files = {}
@@ -715,12 +718,24 @@ class TestScenario(object):
         '''
         Return the next expected event to happen.
         '''
-        if not self._pending_events:
-            raise TestScenarioFailure('''An internal error appears to have happened. 
-                next() was called on scenario '{}' to obtain the next expected event, 
-                but Switchyard isn't expecting anything else for this scenario'''.format(self.name))
-        else:
-            return self._pending_events[0].event
+        global lock
+        with lock:
+            if not self._pending_events:
+                raise TestScenarioFailure('''An internal error appears to have happened. 
+                    next() was called on scenario '{}' to obtain the next expected event, 
+                    but Switchyard isn't expecting anything else for this scenario'''.format(self.name))
+            else:
+                return 0, self._pending_events[0].event
+
+    def nextOutEvent(self):
+        # search for the first PacketOutputEvent
+        global lock
+        with lock:
+            for i, event in enumerate(self._pending_events):
+                if isinstance(event.event, PacketOutputEvent):
+                    return i, event.event
+            else:
+                raise TestScenarioFailure("send_packet was called but no sending is expected.")
 
     def failed_test_reason(self):
         return self._pending_events[0].event.fail_reason()
@@ -747,14 +762,17 @@ class TestScenario(object):
         Don't let any pending signal interrupt things.
         '''
         self._timer=False
-        if sys.origplatform.startswith('win') and self._tproc is not None:
-            self._tproc.terminate()
-            self._tproc.join()
-            self._tproc = None
-        else:
-            signal.alarm(0)
+        if self._threadTimer is not None:
+            self._threadTimer.cancel()
+        # if sys.origplatform.startswith('win') and self._tproc is not None:
+        #     self._tproc.terminate()
+        #     self._tproc.join()
+        #     self._tproc = None
+        # else:
+        #     signal.alarm(0)
 
-    def testpass(self):
+
+    def testpass(self, eventIdx):
         '''
         Method to call if the current expected event occurs, i.e., an event
         expectation has been met.
@@ -763,7 +781,11 @@ class TestScenario(object):
         any timers that may have been started.
         '''
         self.cancel_timer()
-        ev = self._pending_events.pop(0)
+        global lock
+        with lock:
+            # self._pending_events.pop(0)
+            ev = self._pending_events[eventIdx]
+            del self._pending_events[eventIdx]
         log_debug("Test pass: {} - {}".format(ev.description, str(ev.event)))
         self._completed_events.append(ev)
 
@@ -778,15 +800,19 @@ class TestScenario(object):
         if isinstance(self._pending_events[0].event, PacketOutputEvent):
             log_debug("Setting timer for next PacketOutputEvent")
 
-            signal.signal(self._sigrecv, self._timer_expiry)
-            if sys.origplatform.startswith('win'):
-                if self._tproc is not None:
-                    self._tproc.terminate()
-                    self._tproc.join()
-                self._tproc = Process(target=timerfn, args=(os.getpid(), self.timeout, self._sigsend))
-                self._tproc.start()
-            else:
-                signal.alarm(self.timeout)
+            # signal.signal(self._sigrecv, self._timer_expiry)
+            # if sys.origplatform.startswith('win'):
+            #     if self._tproc is not None:
+            #         self._tproc.terminate()
+            #         self._tproc.join()
+            #     self._tproc = Process(target=timerfn, args=(os.getpid(), self.timeout, self._sigsend))
+            #     self._tproc.start()
+            # else:
+            #     signal.alarm(self.timeout)
+
+            self._threadTimer = threading.Timer(self.timeout, self._timer_expiry)
+            self._threadTimer.start()
+
             self._timer = True
 
         log_debug("Next event expected: "+str(self._pending_events[0].event))
@@ -849,6 +875,7 @@ class TestScenario(object):
     def __getstate__(self):
         odict = self.__dict__.copy()
         del odict['_timer']
+        del odict['_threadTimer']
         odict['_events'] = odict['_pending_events'] + odict['_completed_events']
         del odict['_pending_events']
         del odict['_completed_events']
@@ -860,6 +887,7 @@ class TestScenario(object):
         xdict['_pending_events'] = xdict['_events']
         del xdict['_events']
         xdict['_timer'] = None
+        xdict['_threadTimer'] = None
         xdict['_completed_events'] = []
         xdict['_setup'] = None
         xdict['_teardown'] = None

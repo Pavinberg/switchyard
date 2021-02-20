@@ -71,12 +71,13 @@ class LLNetTest(LLNetBase):
         if self.scenario.done():
             raise Shutdown()
 
-        ev = self.scenario.next()
+        idx, ev = self.scenario.next()
         if ev.match(SwitchyardTestEvent.EVENT_INPUT) == SwitchyardTestEvent.MATCH_SUCCESS:
-            self.scenario.testpass()
+            self.scenario.testpass(idx)
             return ev.generate_packet(self.timestamp, self.scenario)
         else:
-            raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
+            raise NoPackets
+            # raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
 
     def send_packet(self, devname, pkt):
         if self.scenario.done():
@@ -89,11 +90,11 @@ class LLNetTest(LLNetBase):
         if isinstance(devname, Interface):
             devname = devname.name
 
-        ev = self.scenario.next()
+        idx, ev = self.scenario.nextOutEvent()
         match_results = ev.match(
             SwitchyardTestEvent.EVENT_OUTPUT, device=devname, packet=pkt)
         if match_results == SwitchyardTestEvent.MATCH_SUCCESS:
-            self.scenario.testpass()
+            self.scenario.testpass(idx)
         elif match_results == SwitchyardTestEvent.MATCH_FAIL:
             raise TestScenarioFailure(
                 "send_packet was called instead of {}".format(str(ev)))
