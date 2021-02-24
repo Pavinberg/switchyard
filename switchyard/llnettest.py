@@ -13,6 +13,7 @@ import base64
 import fnmatch
 import copy
 import textwrap
+import threading
 from collections import namedtuple
 
 from .llnetbase import LLNetBase, ReceivedPacket, _start_usercode
@@ -23,6 +24,8 @@ from .lib.testing import *
 from .lib.debugging import *
 from .lib.logging import log_debug, log_info, log_failure
 from .lib.exceptions import *
+
+lock = threading.Lock()
 
 class LLNetTest(LLNetBase):
 
@@ -71,12 +74,13 @@ class LLNetTest(LLNetBase):
         if self.scenario.done():
             raise Shutdown()
 
-        idx, ev = self.scenario.next()
-        if ev.match(SwitchyardTestEvent.EVENT_INPUT) == SwitchyardTestEvent.MATCH_SUCCESS:
-            self.scenario.testpass(idx)
-            return ev.generate_packet(self.timestamp, self.scenario)
-        else:
-            raise NoPackets
+        with lock:
+            ev = self.scenario.next()
+            if ev.match(SwitchyardTestEvent.EVENT_INPUT) == SwitchyardTestEvent.MATCH_SUCCESS:
+                self.scenario.testpass()
+                return ev.generate_packet(self.timestamp, self.scenario)
+            else:
+                raise NoPackets
             # raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
 
     def send_packet(self, devname, pkt):
@@ -90,19 +94,20 @@ class LLNetTest(LLNetBase):
         if isinstance(devname, Interface):
             devname = devname.name
 
-        idx, ev = self.scenario.nextOutEvent()
-        match_results = ev.match(
-            SwitchyardTestEvent.EVENT_OUTPUT, device=devname, packet=pkt)
-        if match_results == SwitchyardTestEvent.MATCH_SUCCESS:
-            self.scenario.testpass(idx)
-        elif match_results == SwitchyardTestEvent.MATCH_FAIL:
-            raise TestScenarioFailure(
-                "send_packet was called instead of {}".format(str(ev)))
-        else:
-            # Not a pass or fail yet: means that we
-            # are expecting more PacketOutputEvent objects before declaring
-            # that the expectation matches/passes
-            pass
+        with lock:
+            ev = self.scenario.nextOutEvent()
+            match_results = ev.match(
+                SwitchyardTestEvent.EVENT_OUTPUT, device=devname, packet=pkt)
+            if match_results == SwitchyardTestEvent.MATCH_SUCCESS:
+                self.scenario.testpass()
+            elif match_results == SwitchyardTestEvent.MATCH_FAIL:
+                raise TestScenarioFailure(
+                    "send_packet was called instead of {}".format(str(ev)))
+            else:
+                # Not a pass or fail yet: means that we
+                # are expecting more PacketOutputEvent objects before declaring
+                # that the expectation matches/passes
+                pass
         self.timestamp += 1.0
 
 def _prepare_debugger(tb):

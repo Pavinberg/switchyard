@@ -301,7 +301,10 @@ class _PacketMatcher(object):
         self._reference_packet.to_bytes()
 
         self._lastresults = [ self._compare_packet_against_reference(packet) ]
-        self._lastresults += [ eval(fn)(packet) for fn in self._predicates ]
+        try:
+            self._lastresults += [ eval(fn)(packet) for fn in self._predicates ]
+        except AttributeError:
+            return False
         if all(self._lastresults):
             return True
         else:
@@ -403,7 +406,7 @@ class PacketInputTimeoutEvent(SwitchyardTestEvent):
             return SwitchyardTestEvent.MATCH_FAIL
 
     def generate_packet(self, timestamp, scenario):
-        time.sleep(self._timeout)
+        # time.sleep(self._timeout)
         raise NoPackets()
 
     def fail_reason(self):
@@ -593,7 +596,6 @@ class PacketOutputEvent(SwitchyardTestEvent):
 
 TestScenarioEvent = namedtuple('TestScenarioEvent', ['event','description','timestamp'])
 
-lock = threading.Lock()
 class TestScenario(object):
     '''
     Test scenario definition.  Given a list of packetio event objects,
@@ -613,6 +615,7 @@ class TestScenario(object):
         self._teardown = None
         self._lastout = None
         self._tproc = None
+        self._currentFocusEventIdx = None
         if hasattr(sys, "origplatform") and sys.origplatform.startswith('win'):
             self._sigrecv = signal.SIGBREAK
             self._sigsend = signal.CTRL_BREAK_EVENT
@@ -711,34 +714,32 @@ class TestScenario(object):
         this is the expectation that wasn't met.
         '''
         if self._pending_events:
-            return self._pending_events[0]
+            return self._pending_events[self._currentFocusEventIdx]
         return None
 
     def next(self):
         '''
         Return the next expected event to happen.
         '''
-        global lock
-        with lock:
-            if not self._pending_events:
-                raise TestScenarioFailure('''An internal error appears to have happened. 
-                    next() was called on scenario '{}' to obtain the next expected event, 
-                    but Switchyard isn't expecting anything else for this scenario'''.format(self.name))
-            else:
-                return 0, self._pending_events[0].event
+        if not self._pending_events:
+            # raise TestScenarioFailure('''An internal error appears to have happened. 
+            # next() was called on scenario '{}' to obtain the next expected event, 
+            # but Switchyard isn't expecting anything else for this scenario'''.format(self.name))
+            raise NoPackets
+        else:
+            self._currentFocusEventIdx = 0
+            return self._pending_events[self._currentFocusEventIdx].event
 
     def nextOutEvent(self):
         # search for the first PacketOutputEvent
-        global lock
-        with lock:
-            for i, event in enumerate(self._pending_events):
-                if isinstance(event.event, PacketOutputEvent):
-                    return i, event.event
-            else:
-                raise TestScenarioFailure("send_packet was called but no sending is expected.")
+        for i, event in enumerate(self._pending_events):
+            if isinstance(event.event, PacketOutputEvent):
+                self._currentFocusEventIdx = i
+                return event.event
+        raise TestScenarioFailure("send_packet was called but no sending is expected.")
 
     def failed_test_reason(self):
-        return self._pending_events[0].event.fail_reason()
+        return self._pending_events[self._currentFocusEventIdx].event.fail_reason()
 
     def _timer_expiry(self, signum, stackframe):
         '''
@@ -772,7 +773,7 @@ class TestScenario(object):
         #     signal.alarm(0)
 
 
-    def testpass(self, eventIdx):
+    def testpass(self):
         '''
         Method to call if the current expected event occurs, i.e., an event
         expectation has been met.
@@ -781,11 +782,9 @@ class TestScenario(object):
         any timers that may have been started.
         '''
         self.cancel_timer()
-        global lock
-        with lock:
-            # self._pending_events.pop(0)
-            ev = self._pending_events[eventIdx]
-            del self._pending_events[eventIdx]
+        # self._pending_events.pop(0)
+        ev = self._pending_events[self._currentFocusEventIdx]
+        del self._pending_events[self._currentFocusEventIdx]
         log_debug("Test pass: {} - {}".format(ev.description, str(ev.event)))
         self._completed_events.append(ev)
 
@@ -881,6 +880,7 @@ class TestScenario(object):
         del odict['_completed_events']
         del odict['_setup']
         del odict['_teardown']
+        del odict['_currentFocusEventIdx']
         return odict
 
     def __setstate__(self, xdict):
@@ -891,6 +891,7 @@ class TestScenario(object):
         xdict['_completed_events'] = []
         xdict['_setup'] = None
         xdict['_teardown'] = None
+        xdict['_currentFocusEventIdx'] = None
         self.__dict__.update(xdict)
 
     def __eq__(self, other):
