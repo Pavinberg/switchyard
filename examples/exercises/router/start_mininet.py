@@ -42,8 +42,8 @@ class PyRouterTopo(Topo):
         self.addHost('server2', **nodeconfig)
         self.addHost('router', **nodeconfig)
         self.addHost('client', **nodeconfig)
-        
-        linkconfig = { 
+
+        linkconfig = {
             'bw': 10,
             'delay': 0.010,
             'loss': 0.0
@@ -78,9 +78,9 @@ def setup_addressing(net):
     reset_macs(net, 'server2', '20:00:00:00:00:{:02x}')
     reset_macs(net, 'client', '30:00:00:00:00:{:02x}')
     reset_macs(net, 'router', '40:00:00:00:00:{:02x}')
-    set_ip_pair(net, 'server1','router','192.168.100.1/30','192.168.100.2/30')
-    set_ip_pair(net, 'server2','router','192.168.200.1/30','192.168.200.2/30')
-    set_ip_pair(net, 'client','router','10.1.1.1/30','10.1.1.2/30')
+    set_ip_pair(net, 'server1', 'router', '192.168.100.1/30', '192.168.100.2/30')
+    set_ip_pair(net, 'server2', 'router', '192.168.200.1/30', '192.168.200.2/30')
+    set_ip_pair(net, 'client', 'router', '10.1.1.1/30', '10.1.1.2/30')
     set_route(net, 'server1', '10.1.0.0/16', '192.168.100.2')
     set_route(net, 'server1', '192.168.200.0/24', '192.168.100.2')
     set_route(net, 'server2', '10.1.0.0/16', '192.168.200.2')
@@ -89,13 +89,13 @@ def setup_addressing(net):
     set_route(net, 'client', '192.168.200.0/24', '10.1.1.2')
     set_route(net, 'client', '172.16.0.0/16', '10.1.1.2')
 
-    forwarding_table = open('forwarding_table.txt', 'w')    
-    table = '''192.168.100.0 255.255.255.0 192.168.100.1 router-eth0
-    192.168.200.0 255.255.255.0 192.168.200.1 router-eth1
-    10.1.0.0 255.255.0.0 10.1.1.1 router-eth2
-    '''
-    forwarding_table.write(table)
-    forwarding_table.close()
+    table = (
+        "192.168.100.0 255.255.255.0 192.168.100.1 router-eth0\n"
+        "192.168.200.0 255.255.255.0 192.168.200.1 router-eth1\n"
+        "10.1.0.0 255.255.0.0 10.1.1.1 router-eth2"
+    )
+    with open('forwarding_table.txt', 'w') as fp:
+        fp.write(table)
 
 def disable_ipv6(net):
     for v in net.values():

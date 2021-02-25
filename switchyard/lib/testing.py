@@ -36,6 +36,18 @@ class TestScenarioFailure(SwitchyardException):
     is not met.'''
     pass
 
+import queue
+
+ThreadExceptionQueue = queue.Queue()
+
+def checkThreadFailed():
+    if not ThreadExceptionQueue.empty():
+        raise ThreadExceptionQueue.get()
+
+def raiseTestScenarioFailure(message: str):
+    '''used to raise exception in sub-thread'''
+    ThreadExceptionQueue.put(TestScenarioFailure(message))
+    raise TestScenarioFailure(message)
 
 class _PacketMatcher(object):
     '''
@@ -105,7 +117,7 @@ class _PacketMatcher(object):
                 except SyntaxError:
                     raise SyntaxError("Predicate strings must conform to Python lambda syntax")
                 if type(boguslambda) != type(fn):                    
-                    raise Exception("Predicate was not a lambda expression: {}".format(predicate[i]))
+                    raise Exception("Predicate was not a lambda expression: {}".format(predicates[i]))
                 pred.append(predicates[i])
         return pred
 
@@ -469,7 +481,7 @@ class PacketInputEvent(SwitchyardTestEvent):
         # is just testing code!
         self._packet = Packet(raw=self._packet.to_bytes(), first_header=self._first_header)
         if self._device not in scenario.interfaces():
-            raise TestScenarioFailure("Test scenario problem: input event refers to an interface ({}) that is not configured in the scenario (these are the interfaces configured: {})".format(self._device, ', '.join(scenario.interfaces().keys())))
+            raiseTestScenarioFailure("Test scenario problem: input event refers to an interface ({}) that is not configured in the scenario (these are the interfaces configured: {})".format(self._device, ', '.join(scenario.interfaces().keys())))
         if self._copyfromlastout:
             for i in range(len(self._copyfromlastout)):
                 intf,outcls,outprop,incls,inprop = self._copyfromlastout[i]
@@ -540,9 +552,9 @@ class PacketOutputEvent(SwitchyardTestEvent):
                 else:
                     return SwitchyardTestEvent.MATCH_PARTIAL
             else:
-                raise TestScenarioFailure("You called send_packet and while the output port {} is ok, {}.".format(device, matcher.fail_reason(pkt)))
+                raiseTestScenarioFailure("You called send_packet and while the output port {} is ok, {}.".format(device, matcher.fail_reason(pkt)))
         else:
-            raise TestScenarioFailure("You called send_packet with an unexpected output port {}.  Here is what Switchyard expected: {}.".format(device, str(self)))
+            raiseTestScenarioFailure("You called send_packet with an unexpected output port {}.  Here is what Switchyard expected: {}.".format(device, str(self)))
 
     def fail_reason(self):
         message = ""
@@ -609,7 +621,7 @@ class TestScenario(object):
         self._timer = False
         self._threadTimer = None
         self._next_timestamp = 0.0
-        self._timeoutval = 60
+        self._timeoutval = 30
         self._support_files = {}
         self._setup = None
         self._teardown = None
@@ -725,7 +737,7 @@ class TestScenario(object):
             # raise TestScenarioFailure('''An internal error appears to have happened. 
             # next() was called on scenario '{}' to obtain the next expected event, 
             # but Switchyard isn't expecting anything else for this scenario'''.format(self.name))
-            raise NoPackets
+            raise NoPackets()
         else:
             self._currentFocusEventIdx = 0
             return self._pending_events[self._currentFocusEventIdx].event
@@ -736,7 +748,7 @@ class TestScenario(object):
             if isinstance(event.event, PacketOutputEvent):
                 self._currentFocusEventIdx = i
                 return event.event
-        raise TestScenarioFailure("send_packet was called but no sending is expected.")
+        raiseTestScenarioFailure("send_packet was called but no sending is expected.")
 
     def failed_test_reason(self):
         return self._pending_events[self._currentFocusEventIdx].event.fail_reason()
@@ -752,9 +764,11 @@ class TestScenario(object):
 
         if self._timer:
             log_debug("Timer expiration while expecting PacketOutputEvent")
-            raise TestScenarioFailure('''Switchyard expected your program to call send_packet in 
-                order to match {} in scenario {}, but it wasn't called.  After {} seconds,
-                Switchyard gave up.'''.format(str(self._pending_events[0]), self.name, self.timeout))
+
+            raiseTestScenarioFailure("Switchyard expected your program to call send_packet in "
+                "order to match {} in scenario {}, but it wasn't called.  After {} seconds, "
+                "Switchyard gave up.".format(str(self._pending_events[0]), self.name, self.timeout))
+            
         else:
             log_debug("Ignoring timer expiry with timer=False")
 
@@ -809,7 +823,7 @@ class TestScenario(object):
             # else:
             #     signal.alarm(self.timeout)
 
-            self._threadTimer = threading.Timer(self.timeout, self._timer_expiry)
+            self._threadTimer = threading.Timer(self.timeout, self._timer_expiry, args=[None, None])
             self._threadTimer.start()
 
             self._timer = True

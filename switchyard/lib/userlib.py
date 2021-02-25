@@ -6,6 +6,6 @@ from .address import *
 from .exceptions import *
 from .logging import log_debug, log_info, log_failure, log_warn
 from .interface import Interface, InterfaceType
-from .testing import PacketInputEvent, PacketOutputEvent, PacketInputTimeoutEvent, TestScenario
+from .testing import PacketInputEvent, PacketOutputEvent, PacketInputTimeoutEvent, TestScenario, checkThreadFailed
 from .debugging import debugger
 from .socket.socketemu import ApplicationLayer

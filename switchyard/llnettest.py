@@ -73,6 +73,9 @@ class LLNetTest(LLNetBase):
         # check if we're done with test scenario
         if self.scenario.done():
             raise Shutdown()
+        # This line is used in multi-thread scenario who can catch
+        # exception from other threads and interrupt the test
+        checkThreadFailed()
 
         with lock:
             ev = self.scenario.next()
@@ -80,7 +83,7 @@ class LLNetTest(LLNetBase):
                 self.scenario.testpass()
                 return ev.generate_packet(self.timestamp, self.scenario)
             else:
-                raise NoPackets
+                raise NoPackets()
             # raise TestScenarioFailure("recv_packet was called instead of {}".format(str(ev)))
 
     def send_packet(self, devname, pkt):
@@ -159,7 +162,7 @@ def run_tests(scenario_names, usercode_entry_point, options):
         sobj.do_setup()
         net = LLNetTest(sobj)
 
-        log_info("Starting test scenario {}".format(sname))
+        log_info("Starting test scenario {} for multithread".format(sname))
         exc, value, tb = None, None, None
         message = '''All tests passed!'''
         expected = None

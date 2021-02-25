@@ -4,36 +4,39 @@
 Basic IPv4 router (static routing) in Python.
 '''
 
-import sys
-import os
+from switchyard.lib.testing import checkThreadFailed
 import time
+import switchyard
 from switchyard.lib.userlib import *
 
+
 class Router(object):
-    def __init__(self, net):
+    def __init__(self, net: switchyard.llnetbase.LLNetBase):
         self.net = net
         # other initialization stuff here
 
+    def process_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
+        timestamp, ifaceName, packet = recv
+        # TODO: your logic here
+        ...
 
-    def router_main(self):    
-        '''
-        Main method for router; we stay in a loop in this method, receiving
-        packets until the end of time.
+    def start(self):
+        '''A running daemon of the router.
+        Receive packets until the end of time.
         '''
         while True:
-            gotpkt = True
             try:
-                timestamp,dev,pkt = self.net.recv_packet(timeout=1.0)
+                recv = self.net.recv_packet(timeout=1.0)
             except NoPackets:
-                log_debug("No packets available in recv_packet")
-                gotpkt = False
+                continue
             except Shutdown:
-                log_debug("Got shutdown signal")
                 break
+            self.process_packet(recv)
 
-            if gotpkt:
-                log_debug("Got a packet: {}".format(str(pkt)))
+        self.shutdown()
 
+    def shutdown(self):
+        self.net.shutdown()
 
 
 def main(net):
@@ -41,6 +44,5 @@ def main(net):
     Main entry point for router.  Just create Router
     object and get it going.
     '''
-    r = Router(net)
-    r.router_main()
-    net.shutdown()
+    router = Router(net)
+    router.start()
