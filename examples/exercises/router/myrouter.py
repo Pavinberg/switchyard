@@ -14,7 +14,7 @@ class Router(object):
         self.net = net
         # other initialization stuff here
 
-    def process_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
+    def handle_packet(self, recv: switchyard.llnetbase.ReceivedPacket):
         timestamp, ifaceName, packet = recv
         # TODO: your logic here
         ...
@@ -30,7 +30,8 @@ class Router(object):
                 continue
             except Shutdown:
                 break
-            self.process_packet(recv)
+
+            self.handle_packet(recv)
 
         self.stop()
 
