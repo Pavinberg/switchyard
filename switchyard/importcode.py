@@ -11,6 +11,8 @@ def import_or_die(module_name, entrypoint_names):
     (str) -> function reference
     '''
     log_debug("Importing {}".format(module_name))
+    if not os.path.exists(module_name):
+        raise FileNotFoundError(f"Cannot find file '{module_name}'")
     module_name = os.path.abspath(module_name)
     if module_name.endswith('.py'):
         module_name,ext = os.path.splitext(module_name)
